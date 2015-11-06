@@ -1,9 +1,9 @@
 package calculator;
 
 import java.util.AbstractSequentialList;
-import java.util.Arrays;
 import java.util.LinkedList;
-import java.util.Stack;
+import java.util.List;
+import java.util.Scanner;
 
 import constant.Region;
 import constant.staticdata.ChampData;
@@ -40,53 +40,96 @@ public class SpellEfficiencyCalculator {
 	/** The amount of cooldown reduction to be used */
 	private Double coolDownReduction;
 	
+	/** An  integer representation of the highest cooldown reduction possible in League of Legends */
+	private static final int MAX_CDR = 40;
+	
 	/** The link that denotes that a coefficient is meant for AP */
-	public static final String SPELL_DAMAGE = "spelldamage";
+	private static final String SPELL_DAMAGE = "spelldamage";
 	
 	/** The link that denotes that a coefficient is meant for AD */
-	public static final String ATTACK_DAMAGE = "attackdamage";
+	private static final String ATTACK_DAMAGE = "attackdamage";
 		
 	/**
-	 * Creates a new SpellEfficiencyCalculator object, with an empty stack and ability power,
+	 * Creates a new SpellEfficiencyCalculator object, with an empty spell list and ability power,
 	 * attack power, and cooldown reduction all set to zero.
+	 * @throws RiotApiException thrown whenever information can not be properly retrieved from the Riot API
 	 */
-	public SpellEfficiencyCalculator(){
+	public SpellEfficiencyCalculator() throws RiotApiException{
 		damageSpells = new LinkedList<ChampionSpell>();
+		loadSpells();
 		setAbilityPower(0.0);
 		setAttackPower(0.0);
 		setCoolDownReduction(0.0);
 	}
 	
-	public void reset() throws RiotApiException{
+	/**
+	 * Resets each of the ability power, attack power, and cooldown reduction fields back to their
+	 * default value of zero.
+	 */
+	public void reset(){
 		setAbilityPower(0.0);
 		setAttackPower(0.0);
 		setCoolDownReduction(0.0);
 	}
-
+	
+	/**
+	 * Returns the current ability power.
+	 * @return the current ability power
+	 */
 	public Double getAbilityPower() {
 		return abilityPower;
 	}
-
+	
+	/**
+	 * Sets the ability power to the passed in value.
+	 * @param abilityPower the ability power to be set
+	 */
 	public void setAbilityPower(Double abilityPower) {
 		this.abilityPower = abilityPower;
 	}
 
+	/**
+	 * Returns the current attack power.
+	 * @return the current attack power
+	 */
 	public Double getAttackPower() {
 		return attackPower;
 	}
 
+	/**
+	 * Sets the attack power to the passed in value.
+	 * @param attackPower the attack power to be set
+	 */
 	public void setAttackPower(Double attackPower) {
 		this.attackPower = attackPower;
 	}
-
+	
+	/**
+	 * Returns the current cooldown reduction.
+	 * @return the current cooldown reduction
+	 */
 	public Double getCoolDownReduction() {
 		return coolDownReduction;
 	}
-
-	public void setCoolDownReduction(Double coolDownReduction) {
+	
+	/**
+	 * 
+	 * @param coolDownReduction the cooldown reduction to be set
+	 * @throws IllegalArgumentException if cooldown reduction passed in exceeds 40
+	 */
+	public void setCoolDownReduction(Double coolDownReduction) throws IllegalArgumentException {
+		if(coolDownReduction > MAX_CDR){
+			throw new IllegalArgumentException("Cooldown reduction can not exceed 40%.");
+		}
 		this.coolDownReduction = coolDownReduction;
 	}
-
+	
+	/**
+	 * Loads all of the spells into the damageSpells linked list that contain the label "Damage".
+	 * Information about the spells is obtained through the Riot API and as such an exception is
+	 * thrown when access is unavailable.
+	 * @throws RiotApiException thrown whenever information can not be properly retrieved from the Riot API
+	 */
 	public void loadSpells() throws RiotApiException{
 		ChampionList championList = api.getDataChampionList(Region.NA, null, null, false, ChampData.SPELLS);
 		
@@ -108,77 +151,162 @@ public class SpellEfficiencyCalculator {
 	 */
 	public ChampionSpell calculateEfficiency(){
 		ChampionSpell mostEfficient = null;
-		Double DPS = 0.0;
-		Double mostDPS = 0.0;
+		Double dps = 0.0;
+		Double mostDPS = Double.MIN_VALUE;
 		for(ChampionSpell spell : damageSpells){
-			DPS = getDPS(spell);
-			if(DPS > mostDPS){
-				mostDPS = DPS;
+			dps = getDPS(spell);
+			if(dps > mostDPS){
+				mostDPS = dps;
 				mostEfficient = spell;
 			}
 		}
-		System.out.println(mostEfficient.getName() + " is most efficient with a DPS of " + mostDPS);
+		
 		return mostEfficient;
 	}
 	
-	private Double getDPS(ChampionSpell spell){
-		return ((getBaseDamage(spell) + getMagicDamage(spell)) + getPhysicalDamage(spell) /getCoolDown(spell));
+	/**
+	 * Returns the DPS of a spell passed in. Does not account for resistances or inefficiencies.
+	 * For example, Akali's "Shadow Dance" spell is assumed to have an Essence of Shadow as soon
+	 * as it is off cooldown.
+	 * @param spell the spell to find the DPS of
+	 * @return the DPS of the spell as a double
+	 */
+	public Double getDPS(ChampionSpell spell){
+		return (((getBaseDamage(spell) + getMagicDamage(spell)) + getPhysicalDamage(spell)) /getCoolDown(spell));
 	}
 	
+	/**
+	 * Given a spell, returns the base damage of that spell based on the key value of the "Damage"
+	 * label.
+	 * @param spell the spell to find the base damage of
+	 * @return the base damage of the spell
+	 */
 	private Double getBaseDamage(ChampionSpell spell) {
 		Double damage = 0.0;
-		int idxOfEffect = spell.getLeveltip().getLabel().indexOf("Damage") + 1;
-		String str = spell.getEffectBurn().get(idxOfEffect);
-		String[] effects = str.split("/");
-		damage += Double.parseDouble(effects[effects.length - 1]);
+		if(spell.getEffectBurn() != null){
+			String str = spell.getEffectBurn().get(getDamageKey(spell));
+			if(!str.isEmpty()){
+				damage += Double.parseDouble(str.substring(str.lastIndexOf("/") + 1));
+			}
+		}
 		return damage;
 	}
 
+	/**
+	 * Given a spell, returns the additional physical damage to be added to that spell.
+	 * If there are no variables associated with a spell, simply returns zero.
+	 * @param spell the spell to find the physical damage of
+	 * @return the additional physical damage of the spell
+	 */
 	private Double getPhysicalDamage(ChampionSpell spell) {
 		Double damage = 0.0;
 		int key = getDamageKey(spell);
-		System.out.println(spell.getName());
-		for(int i = 0; i < spell.getVars().size(); i++){
-			if(spell.getVars().get(i) == null){
-				System.out.println("This is stupid.");
-			}
-		}
-		/*
-		for(SpellVars vars : spell.getVars()){
-			if(key == Integer.parseInt(vars.getKey().substring(1))){
-				if(vars.getLink().contains(ATTACK_DAMAGE)){
-					damage += (vars.getCoeff().get(0) * abilityPower);
+		List<SpellVars> varList = spell.getVars();
+		if(varList != null){
+			for(SpellVars vars : spell.getVars()){
+				if(key == Integer.parseInt(vars.getKey().substring(1))){
+					if(vars.getLink().contains(ATTACK_DAMAGE)){
+						damage += (vars.getCoeff().get(0) * attackPower);
+					}
 				}
 			}
 		}
-		*/
 		return damage;
 	}
 
+	/**
+	 * Given a spell, returns the additional magic damage to be added to that spell.
+	 * If there are no variables associated with a spell, simply returns zero.
+	 * @param spell the spell to find the magic damage of
+	 * @return the additional magic damage of the spell
+	 */
 	private Double getMagicDamage(ChampionSpell spell) {
 		Double damage = 0.0;
 		int key = getDamageKey(spell);
-		for(SpellVars vars : spell.getVars()){
-			if(key == Integer.parseInt(vars.getKey().substring(1))){
-				if(vars.getLink().equals(SPELL_DAMAGE)){
-					damage += (vars.getCoeff().get(0) * abilityPower);
+		List<SpellVars> varList = spell.getVars();
+		if(varList != null){
+			for(SpellVars vars : spell.getVars()){
+				if(key == Integer.parseInt(vars.getKey().substring(1))){
+					if(vars.getLink().equals(SPELL_DAMAGE)){
+						damage += (vars.getCoeff().get(0) * abilityPower);
+					}
 				}
 			}
 		}
 		return damage;
 	}
 	
+	/**
+	 * Returns the cooldown of a spell that is passed in with regards to the damage a spell
+	 * outputs. For example, Vorpal Spikes has a cooldown of 0.78 because it is based on 
+	 * Cho'Gath's attack speed. When applicable, takes cooldown reduction into account. 
+	 * @param spell the spell to find the cooldown of
+	 * @return the cooldown of the spell
+	 */
 	private Double getCoolDown(ChampionSpell spell) {
-		return spell.getCooldown().get(spell.getCooldown().size() - 1) * (1 - (coolDownReduction/100));
+		String spellName = spell.getName();
+		Double coolDown = 0.0;
+		switch(spellName){
+			case "Poison Trail":
+				coolDown = 1.0;
+				break;
+			case "Electro Harpoon":
+				coolDown = 10 * (1 - (coolDownReduction/100));
+				break;
+			case "Force of Will":
+				coolDown = 8 * (1 - (coolDownReduction/100));
+				break;
+			case "Rend":
+				coolDown = 8 * (1 - (coolDownReduction/100));
+				break;
+			case "Battle Roar":
+				coolDown = 12 * (1 - (coolDownReduction/100));
+				break;
+			case "Bola Strike":
+				coolDown = 10 * (1 - (coolDownReduction/100));
+				break;
+			case "Sweeping Blade":
+				coolDown =  6.0;
+				break;
+			case "Last Breath":
+				coolDown =  30 * (1 - (coolDownReduction/100));
+				break;
+			case "Riposte":
+				coolDown = 15 * (1 - (coolDownReduction/100));
+				break;
+			case "Vorpal Spikes":
+				coolDown = 0.78;
+				break;
+			case "Excessive Force":
+				coolDown = 4.0;
+				break;
+			default:
+				coolDown = spell.getCooldown().get(spell.getCooldown().size() - 1) * (1 - (coolDownReduction/100));
+		}
+		return coolDown;
 	}
-
+	
+	/**
+	 * Returns the integer portion of the key associated with the "Damage" tag for a spell.
+	 * @param spell the spell to find the "Damage" key of
+	 * @return the integer portion of the "Damage" key
+	 */
 	private int getDamageKey(ChampionSpell spell){
 		int key = 0;
 		int idxOfEffect = spell.getLeveltip().getLabel().indexOf("Damage");
-		key = Integer.parseInt(Arrays.asList(spell.getLeveltip().getEffect().get(idxOfEffect).replaceAll("[^0-9]+", " ").trim().split(" ")).get(0));
+		String keyString = spell.getLeveltip().getEffect().get(idxOfEffect);
+		Scanner lineScan = new Scanner(keyString);
+		if(lineScan.useDelimiter("\\D+").hasNextInt()){
+			key = lineScan.useDelimiter("\\D+").nextInt();
+		}
+		lineScan.close();
 		return key;
 	}
 	
+	/**
+	 * Returns the entire list of damaging spells.
+	 * @return the list of damaging spells
+	 */
 	public AbstractSequentialList<ChampionSpell> getDamageSpells() {
 		return damageSpells;
 	}

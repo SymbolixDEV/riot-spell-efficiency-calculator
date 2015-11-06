@@ -30,17 +30,10 @@ public class SpellEfficiencyCalculatorTest {
 		}
 		assertTrue(!sec.getDamageSpells().isEmpty());
 		
-		for(ChampionSpell spell : sec.getDamageSpells()){
-			if(spell == null){
-				System.out.print("NULL -- ");
-			}
-			System.out.println(spell.getName());
-		}
-		
-		
-		sec.setAbilityPower(0.0);
+						
+		sec.setAbilityPower(9999999.0);
 		sec.setAttackPower(0.0);
-		sec.setCoolDownReduction(20.0);
+		sec.setCoolDownReduction(40.0);
 		sec.calculateEfficiency();
 		
 		
