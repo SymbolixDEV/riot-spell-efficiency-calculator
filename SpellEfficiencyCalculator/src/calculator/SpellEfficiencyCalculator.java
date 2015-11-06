@@ -14,6 +14,8 @@ import dto.Static.SpellVars;
 import main.java.riotapi.RiotApi;
 import main.java.riotapi.RiotApiException;
 
+import exception.NegativeNumberException;
+
 /**
  * An object that is useful for calculating the most efficient spell in League of Legends. In this
  * case, efficiency is defined strictly by damage per second. Factors that are considered include
@@ -21,6 +23,7 @@ import main.java.riotapi.RiotApiException;
  * running this program. Also, assumes that the target has no magic resistance or armor, and does
  * not take into account the health of the champion or target. Only calculates efficiency based
  * on the initial hit, not over time or returning damage.
+ * 
  * @author Leonard Kerr
  */
 public class SpellEfficiencyCalculator {
@@ -38,7 +41,7 @@ public class SpellEfficiencyCalculator {
 	private Double attackPower;
 	
 	/** The amount of cooldown reduction to be used */
-	private Double coolDownReduction;
+	private Double cooldownReduction;
 	
 	/** An  integer representation of the highest cooldown reduction possible in League of Legends */
 	private static final int MAX_CDR = 40;
@@ -52,9 +55,10 @@ public class SpellEfficiencyCalculator {
 	/**
 	 * Creates a new SpellEfficiencyCalculator object, with an empty spell list and ability power,
 	 * attack power, and cooldown reduction all set to zero.
-	 * @throws RiotApiException thrown whenever information can not be properly retrieved from the Riot API
+	 * @throws RiotApiException whenever information can not be properly retrieved from the Riot API
+	 * @throws NegativeNumberException if the default constructor value for attack or ability power is negative
 	 */
-	public SpellEfficiencyCalculator() throws RiotApiException{
+	public SpellEfficiencyCalculator() throws RiotApiException, NegativeNumberException{
 		damageSpells = new LinkedList<ChampionSpell>();
 		loadSpells();
 		setAbilityPower(0.0);
@@ -65,8 +69,9 @@ public class SpellEfficiencyCalculator {
 	/**
 	 * Resets each of the ability power, attack power, and cooldown reduction fields back to their
 	 * default value of zero.
+	 * @throws NegativeNumberException if the number to reset the fields to is negative
 	 */
-	public void reset(){
+	public void reset() throws NegativeNumberException{
 		setAbilityPower(0.0);
 		setAttackPower(0.0);
 		setCoolDownReduction(0.0);
@@ -83,8 +88,12 @@ public class SpellEfficiencyCalculator {
 	/**
 	 * Sets the ability power to the passed in value.
 	 * @param abilityPower the ability power to be set
+	 * @throws NegativeNumberException when the ability power passed in is negative
 	 */
-	public void setAbilityPower(Double abilityPower) {
+	public void setAbilityPower(Double abilityPower) throws NegativeNumberException {
+		if (abilityPower < 0){
+			throw new NegativeNumberException("Ability power must be a positive, real number.");
+		}
 		this.abilityPower = abilityPower;
 	}
 
@@ -99,8 +108,12 @@ public class SpellEfficiencyCalculator {
 	/**
 	 * Sets the attack power to the passed in value.
 	 * @param attackPower the attack power to be set
+	 * @throws NegativeNumberException when the attack power passed in is negative
 	 */
-	public void setAttackPower(Double attackPower) {
+	public void setAttackPower(Double attackPower) throws NegativeNumberException {
+		if (attackPower < 0){
+			throw new NegativeNumberException("Attack power must be a positive, real number.");
+		}
 		this.attackPower = attackPower;
 	}
 	
@@ -109,26 +122,26 @@ public class SpellEfficiencyCalculator {
 	 * @return the current cooldown reduction
 	 */
 	public Double getCoolDownReduction() {
-		return coolDownReduction;
+		return cooldownReduction;
 	}
 	
 	/**
-	 * 
+	 * Sets the cooldown reduction to the passed in value if it is between 0 and 40 inclusive.
 	 * @param coolDownReduction the cooldown reduction to be set
-	 * @throws IllegalArgumentException if cooldown reduction passed in exceeds 40
+	 * @throws IllegalArgumentException if cooldown reduction passed in exceeds 40 or is negative
 	 */
 	public void setCoolDownReduction(Double coolDownReduction) throws IllegalArgumentException {
-		if(coolDownReduction > MAX_CDR){
-			throw new IllegalArgumentException("Cooldown reduction can not exceed 40%.");
+		if(coolDownReduction > MAX_CDR || coolDownReduction < 0){
+			throw new IllegalArgumentException("Cooldown reduction must be between 0-40%.");
 		}
-		this.coolDownReduction = coolDownReduction;
+		this.cooldownReduction = coolDownReduction;
 	}
 	
 	/**
 	 * Loads all of the spells into the damageSpells linked list that contain the label "Damage".
 	 * Information about the spells is obtained through the Riot API and as such an exception is
 	 * thrown when access is unavailable.
-	 * @throws RiotApiException thrown whenever information can not be properly retrieved from the Riot API
+	 * @throws RiotApiException whenever information can not be properly retrieved from the Riot API
 	 */
 	public void loadSpells() throws RiotApiException{
 		ChampionList championList = api.getDataChampionList(Region.NA, null, null, false, ChampData.SPELLS);
@@ -160,7 +173,6 @@ public class SpellEfficiencyCalculator {
 				mostEfficient = spell;
 			}
 		}
-		
 		return mostEfficient;
 	}
 	
@@ -251,28 +263,28 @@ public class SpellEfficiencyCalculator {
 				coolDown = 1.0;
 				break;
 			case "Electro Harpoon":
-				coolDown = 10 * (1 - (coolDownReduction/100));
+				coolDown = 10 * (1 - (cooldownReduction/100));
 				break;
 			case "Force of Will":
-				coolDown = 8 * (1 - (coolDownReduction/100));
+				coolDown = 8 * (1 - (cooldownReduction/100));
 				break;
 			case "Rend":
-				coolDown = 8 * (1 - (coolDownReduction/100));
+				coolDown = 8 * (1 - (cooldownReduction/100));
 				break;
 			case "Battle Roar":
-				coolDown = 12 * (1 - (coolDownReduction/100));
+				coolDown = 12 * (1 - (cooldownReduction/100));
 				break;
 			case "Bola Strike":
-				coolDown = 10 * (1 - (coolDownReduction/100));
+				coolDown = 10 * (1 - (cooldownReduction/100));
 				break;
 			case "Sweeping Blade":
 				coolDown =  6.0;
 				break;
 			case "Last Breath":
-				coolDown =  30 * (1 - (coolDownReduction/100));
+				coolDown =  30 * (1 - (cooldownReduction/100));
 				break;
 			case "Riposte":
-				coolDown = 15 * (1 - (coolDownReduction/100));
+				coolDown = 15 * (1 - (cooldownReduction/100));
 				break;
 			case "Vorpal Spikes":
 				coolDown = 0.78;
@@ -281,7 +293,7 @@ public class SpellEfficiencyCalculator {
 				coolDown = 4.0;
 				break;
 			default:
-				coolDown = spell.getCooldown().get(spell.getCooldown().size() - 1) * (1 - (coolDownReduction/100));
+				coolDown = spell.getCooldown().get(spell.getCooldown().size() - 1) * (1 - (cooldownReduction/100));
 		}
 		return coolDown;
 	}
